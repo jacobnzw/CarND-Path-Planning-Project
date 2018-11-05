@@ -78,10 +78,10 @@ int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x,
   if(angle > pi()/4)
   {
     closestWaypoint++;
-  if (closestWaypoint == maps_x.size())
-  {
-    closestWaypoint = 0;
-  }
+		if (closestWaypoint == maps_x.size())
+		{
+			closestWaypoint = 0;
+		}
   }
 
   return closestWaypoint;
@@ -221,37 +221,44 @@ int main() {
           // j[1] is the data JSON object
           
         	// Main car's localization Data
-          	double car_x = j[1]["x"];
-          	double car_y = j[1]["y"];
-          	double car_s = j[1]["s"];
-          	double car_d = j[1]["d"];
-          	double car_yaw = j[1]["yaw"];
-          	double car_speed = j[1]["speed"];
+					double car_x = j[1]["x"];
+					double car_y = j[1]["y"];
+					double car_s = j[1]["s"];
+					double car_d = j[1]["d"];
+					double car_yaw = j[1]["yaw"];  // in degrees
+					double car_speed = j[1]["speed"];
 
-          	// Previous path data given to the Planner
-          	auto previous_path_x = j[1]["previous_path_x"];
-          	auto previous_path_y = j[1]["previous_path_y"];
-          	// Previous path's end s and d values 
-          	double end_path_s = j[1]["end_path_s"];
-          	double end_path_d = j[1]["end_path_d"];
+					// Previous path data given to the Planner
+					auto previous_path_x = j[1]["previous_path_x"];
+					auto previous_path_y = j[1]["previous_path_y"];
+					// Previous path's end s and d values 
+					double end_path_s = j[1]["end_path_s"];
+					double end_path_d = j[1]["end_path_d"];
 
-          	// Sensor Fusion Data, a list of all other cars on the same side of the road.
-          	auto sensor_fusion = j[1]["sensor_fusion"];
+					// Sensor Fusion Data, a list of all other cars on the same side of the road.
+					auto sensor_fusion = j[1]["sensor_fusion"];
 
-          	json msgJson;
+					json msgJson;
 
-          	vector<double> next_x_vals;
-          	vector<double> next_y_vals;
+					vector<double> next_x_vals;
+					vector<double> next_y_vals;
+
+					double dist_inc = 0.5;
+					for(int i = 0; i < 50; i++)
+					{
+						next_x_vals.push_back(car_x + (dist_inc*i)*cos(deg2rad(car_yaw)));
+						next_y_vals.push_back(car_y + (dist_inc*i)*sin(deg2rad(car_yaw)));
+					}
 
 
-          	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          	msgJson["next_x"] = next_x_vals;
-          	msgJson["next_y"] = next_y_vals;
+					// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+					msgJson["next_x"] = next_x_vals;
+					msgJson["next_y"] = next_y_vals;
 
-          	auto msg = "42[\"control\","+ msgJson.dump()+"]";
+					auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
-          	//this_thread::sleep_for(chrono::milliseconds(1000));
-          	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+					//this_thread::sleep_for(chrono::milliseconds(1000));
+					ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
           
         }
       } else {
