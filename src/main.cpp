@@ -220,10 +220,10 @@ int main() {
         if (event == "telemetry") {
           // j[1] is the data JSON object
           
-        	// Main car's localization Data
-					double car_x = j[1]["x"];
+        	// Ego-vehicles's localization data
+					double car_x = j[1]["x"];  // Cartesian coordinates in world frame
 					double car_y = j[1]["y"];
-					double car_s = j[1]["s"];
+					double car_s = j[1]["s"];  // Frenet coordinates in world frame
 					double car_d = j[1]["d"];
 					double car_yaw = j[1]["yaw"];  // in degrees
 					double car_speed = j[1]["speed"];
