@@ -203,7 +203,7 @@ int main() {
   }
 
 	int lane = 1;
-	double ref_vel = 49.5;
+	double ref_vel = 0; //49.5;
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy, &lane, &ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -213,14 +213,10 @@ int main() {
     //auto sdata = string(data).substr(0, length);
     //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
-
       auto s = hasData(data);
-
       if (s != "") {
         auto j = json::parse(s);
-        
         string event = j[0].get<string>();
-        
         if (event == "telemetry") {
           // j[1] is the data JSON object
           
@@ -243,6 +239,52 @@ int main() {
 					auto sensor_fusion = j[1]["sensor_fusion"];
 
 					int prev_size = previous_path_x.size();
+
+          if (prev_size > 0)
+          {
+            car_s = end_path_s;
+          }
+          bool too_close = false;
+
+          // find reference velocity to use
+          for (int i = 0; i < sensor_fusion.size(); i++)
+          {
+            float d = sensor_fusion[i][6];
+            // if sensed car is in my lane
+            if (d > (4*lane) && d < (4*lane + 4))
+            {
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(pow(vx,2) + pow(vy,2));
+              double check_car_s = sensor_fusion[i][5];
+
+              // predict where the sensed car will be in the future 
+              check_car_s += (double)prev_size*0.02*check_speed;
+              // if the sensed car is in front of ego and is less than 30 m away
+              if (check_car_s > car_s && (check_car_s - car_s) < 30)
+              {
+                // ref_vel = 29.5; // mph
+                too_close = true;
+                if (lane > 0)
+                {
+                  lane = 0;
+                }
+              }
+
+            }
+          }
+
+          if (too_close)
+          {
+            ref_vel -= .224;
+          }
+          else if (ref_vel < 49.5)
+          {
+            ref_vel += .224;
+          }
+
+
+
 
 					vector<double> ptsx;
 					vector<double> ptsy;
@@ -326,7 +368,7 @@ int main() {
 						x_add_on = x_point;
 						double x_ref = x_point;
 						double y_ref = y_point;
-						// rotate back to normal after rotating it earlier
+						// transform back to world frame
 						x_point = x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw);
 						y_point = x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw);
 						x_point += ref_x;
@@ -335,7 +377,6 @@ int main() {
 						next_x_vals.push_back(x_point);
 						next_y_vals.push_back(y_point);
 					}
-
 
 					json msgJson;
 					msgJson["next_x"] = next_x_vals;
