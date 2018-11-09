@@ -265,14 +265,35 @@ int main() {
               {
                 // ref_vel = 29.5; // mph
                 too_close = true;
-                if (lane > 0)
+                if (lane == 0)  // ego car in the left lane
                 {
-                  lane = 0;
+									// can change to center lane
+                  lane = 1;
+									break;
                 }
+								else if (lane == 1)  // ego car in the center lane
+								{
+									// can change to either lane
+									lane = 2;
+									break;
+								}
+								else if (lane == 2)  // ego car in the right lane
+								{
+									lane = 1;
+									break;
+								}
               }
-
             }
           }
+
+					// NOTES
+					// based on sensor information, look for cars in front of me in the same lane that I am too close to
+					// if car found
+					// - for each succesor state, determine the cost of trajectory associated to that state
+					// - choose the minimum cost trajectory and realize it
+					// else if no such car found, keep lane
+					// Vehicle object contains state
+					// Use 3 states: KL (keep lane), CLR (change lane right), CLL (change lane left)
 
           if (too_close)
           {
@@ -280,11 +301,8 @@ int main() {
           }
           else if (ref_vel < 49.5)
           {
-            ref_vel += .224;
+            ref_vel += .336;
           }
-
-
-
 
 					vector<double> ptsx;
 					vector<double> ptsy;
