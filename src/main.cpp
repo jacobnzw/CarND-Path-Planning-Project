@@ -165,6 +165,28 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+// define simple finite state machine
+// given a state, return successor states
+vector<string> successor_states(string state)
+{
+	vector<string> next_states;
+	if (state == "KL")
+	{
+		next_states.push_back("KL");
+		next_states.push_back("CLL");
+		next_states.push_back("CLR");
+	}
+	else if (state == "CLL")
+	{
+		next_state.push_back("KL");
+	}
+	else if (state == "CLR")
+	{
+		next_state.push_back("KL");
+	}
+	return next_states;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -244,7 +266,10 @@ int main() {
           {
             car_s = end_path_s;
           }
-          bool too_close = false;
+					
+					const float SAFETY_GAP = 20;  // distance in front of ego car to check for other cars
+					bool too_close = false;
+					string state = "KL";  // default initial state of the ego vehicle
 
           // find reference velocity to use
           for (int i = 0; i < sensor_fusion.size(); i++)
@@ -261,10 +286,11 @@ int main() {
               // predict where the sensed car will be in the future 
               check_car_s += (double)prev_size*0.02*check_speed;
               // if the sensed car is in front of ego and is less than 30 m away
-              if (check_car_s > car_s && (check_car_s - car_s) < 30)
+              if (check_car_s > car_s && (check_car_s - car_s) < SAFETY_GAP)
               {
                 // ref_vel = 29.5; // mph
                 too_close = true;
+								// for each possible lane determine the successor states and break the cycle
                 if (lane == 0)  // ego car in the left lane
                 {
 									// can change to center lane
@@ -285,6 +311,8 @@ int main() {
               }
             }
           }
+					// for each successor state, generate trajectory and assign cost to it
+					// select the trajectory with minimal cost and execute it
 
 					// NOTES
 					// based on sensor information, look for cars in front of me in the same lane that I am too close to
