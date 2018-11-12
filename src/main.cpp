@@ -29,6 +29,11 @@ struct Map {
 	vector<double> waypts_dy;
 };
 
+struct Trajectory {
+	vector<double> waypts_x;
+	vector<double> waypts_y;
+};
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -196,7 +201,7 @@ vector<string> successor_states(string state)
 	return next_states;
 }
 
-vector<vector<double>> generate_trajectory(string next_state, int current_lane, double ref_vel, json &sim_data, Map &map)
+Trajectory generate_trajectory(string next_state, int current_lane, double ref_vel, json &sim_data, Map &map)
 {
 	// unpack localization data
 	double car_x = sim_data[1]["x"];
@@ -310,9 +315,28 @@ vector<vector<double>> generate_trajectory(string next_state, int current_lane, 
 		next_y_vals.push_back(y_point);
 	}
 
-	vector<vector<double>> result = {next_x_vals, next_y_vals};
+	Trajectory result = {next_x_vals, next_y_vals};
 	return result;
 }
+
+bool detect_collision(Trajectory trajectory, vector<vector<double>> predictions_xy, int steps)
+{
+	// T = prev_size = predictions are assumed to be made steps steps ahead, steps < trajectory.size()
+	// TODO: is there find collision
+	double x = trajectory.waypts_x[steps-1];
+	double y = trajectory.waypts_y[steps-1];
+	const float GAP = 3;  //  [m]
+	bool collision = false;
+	for (auto pred : predictions_xy)
+	{
+		if (sqrt(pow(pred[0] - x,2) + pow(pred[1] - y,2)) < GAP)
+		{
+			collision = true;
+		}
+	}
+	return collision;
+}
+
 
 int main() {
   uWS::Hub h;
@@ -387,9 +411,9 @@ int main() {
             car_s = end_path_s;
           }
 					
+					// scan for cars in front of me within SAFETY_GAP
 					const float SAFETY_GAP = 20;  // distance in front of ego car to check for other cars
 					bool too_close = false;
-          // find reference velocity to use
           for (int i = 0; i < sensor_fusion.size(); i++)
           {
             float d = sensor_fusion[i][6];
@@ -400,66 +424,17 @@ int main() {
               double vy = sensor_fusion[i][4];
               double check_speed = sqrt(pow(vx,2) + pow(vy,2));
               double check_car_s = sensor_fusion[i][5];
-
               // predict where the sensed car will be in the future 
               check_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
               // if the sensed car is in front of ego and is less than SAFETY_GAP [m] away
               if (check_car_s > car_s && (check_car_s - car_s) < SAFETY_GAP)
               {
-                // ref_vel = 29.5; // mph
                 too_close = true;
-								// for each possible lane determine the successor states and break the cycle
-                if (lane > 0)  // ego car in the left lane
-                {
-									// can change to center lane
-                  lane = 0;
-									break;
-                }
-								// else if (lane == 1)  // ego car in the center lane
-								// {
-								// 	// can change to either lane
-								// 	lane = 2;
-								// 	break;
-								// }
-								// else if (lane == 2)  // ego car in the right lane
-								// {
-								// 	lane = 1;
-								// 	break;
-								// }
               }
             }
           }
-					
-					// for each successor state, generate trajectory and assign cost to it
-					// min_cost = 9999;
-					// min_state;
-					// for (auto st : successor_states(state))
-					// {
-					// 	vector<vector<double>> = generate_trajectory(st, lane, j);
-					// 	float trajectory_cost = cost(predictions);
-					// 	if (trajectory_cost < min_cost)
-					// 	{
-					// 		min_cost = trajectory_cost;
-					// 		min_state = st;
-					// 	}
-					// }
-					// state = min_state;
-					// min_trajectory = generate_trajectory(state, lane, j);
-					// next_x_vals = min_trajectory[0];
-					// next_y_vals = min_trajectory[1];
-					
-					// select the trajectory with minimal cost and execute it
 
-					// NOTES
-					// based on sensor information, look for cars in front of me in the same lane that I am too close to
-					// if car found
-					// - for each succesor state, determine the cost of trajectory associated to that state
-					// - choose the minimum cost trajectory and realize it
-					// else if no such car found, keep lane
-					// Vehicle object contains state
-					// Use 3 states: KL (keep lane), CLR (change lane right), CLL (change lane left)
-
-          if (too_close)
+					if (too_close)
           {
             ref_vel -= .224;
           }
@@ -467,10 +442,66 @@ int main() {
           {
             ref_vel += .336;
           }
+					
+					vector<double> next_x_vals;
+					vector<double> next_y_vals;
+					if (too_close)
+					{
+						// generate predictions
+						vector<vector<double>> predictions;
+						for (int i = 0; i < sensor_fusion.size(); ++i)
+						{
+							double vx = sensor_fusion[i][3];
+							double vy = sensor_fusion[i][4];
+							double s = sensor_fusion[i][5];
+							double d = sensor_fusion[i][6];
+							s += prev_size*.02 * sqrt(pow(vx,2) + pow(vy,2));
+							auto xy_pt = getXY(s, d, map.waypts_s, map.waypts_x, map.waypts_y);
+							predictions.push_back(xy_pt);
+						}
 
-					auto min_trajectory = generate_trajectory("KL", lane, ref_vel, j, map);
-					auto next_x_vals = min_trajectory[0];
-					auto next_y_vals = min_trajectory[1];
+						// for each successor state, generate trajectory and assign cost to it
+						int min_cost = 9999;
+						string min_state;
+						Trajectory min_trajectory;
+						for (auto st : successor_states(state))
+						{
+							Trajectory tr = generate_trajectory(st, lane, ref_vel, j, map);
+							bool collision = detect_collision(tr, predictions, prev_size);
+							if (!collision)
+							{
+								min_trajectory = tr;
+								min_state = st;
+							}
+							// // select the minimal cost trajectory for execution
+							// if (tr_cost < min_cost)
+							// {
+							// 	min_cost = tr_cost;
+							// 	min_state = st;
+							// 	min_trajectory = tr;
+							// }
+						}
+						state = min_state;
+						next_x_vals = min_trajectory.waypts_x;
+						next_y_vals = min_trajectory.waypts_y;
+					}
+					else
+					{
+						state = "KL";
+						Trajectory tr = generate_trajectory(state, lane, ref_vel, j, map);
+						next_x_vals = tr.waypts_x;
+						next_y_vals = tr.waypts_y;
+					}
+					cout << "state: " << state << " too_close: " << too_close << endl;
+					// NOTES
+					// based on sensor information, look for cars in front of me in the same lane that I am too close to
+					// if car found
+					// - for each succesor state, determine the cost of trajectory associated to that state
+					// else if no such car found, keep lane
+
+					Trajectory tr = generate_trajectory("KL", lane, ref_vel, j, map);
+					next_x_vals = tr.waypts_x;
+					next_y_vals = tr.waypts_y;
 
 					json msgJson;
 					msgJson["next_x"] = next_x_vals;
