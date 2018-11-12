@@ -196,15 +196,15 @@ vector<string> successor_states(string state)
 	return next_states;
 }
 
-vector<vector<double>> generate_trajectory(string next_state, int current_lane, double ref_vel, json &simulator_data, Map &map)
+vector<vector<double>> generate_trajectory(string next_state, int current_lane, double ref_vel, json &sim_data, Map &map)
 {
 	// unpack localization data
-	double car_x = simulator_data[1]["x"];
-	double car_y = simulator_data[1]["y"];
-	double car_s = simulator_data[1]["s"];
-	double car_yaw = simulator_data[1]["yaw"];
-	auto previous_path_x = simulator_data[1]["previous_path_x"];
-	auto previous_path_y = simulator_data[1]["previous_path_y"];
+	double car_x = sim_data[1]["x"];
+	double car_y = sim_data[1]["y"];
+	double car_s = sim_data[1]["s"];
+	double car_yaw = sim_data[1]["yaw"];
+	auto previous_path_x = sim_data[1]["previous_path_x"];
+	auto previous_path_y = sim_data[1]["previous_path_y"];
 
 	vector<double> ptsx;
 	vector<double> ptsy;
@@ -223,6 +223,7 @@ vector<vector<double>> generate_trajectory(string next_state, int current_lane, 
 	}
 
 	int prev_size = previous_path_x.size();
+	if (prev_size > 0) car_s = sim_data[1]["end_path_s"];
 	if (prev_size < 2)
 	{
 		// use two points that make the path tangent to the car
@@ -317,11 +318,6 @@ int main() {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
-  // vector<double> map.waypts_x;
-  // vector<double> map.waypts_y;
-  // vector<double> map.waypts_s;
-  // vector<double> map_waypoints_dx;
-  // vector<double> map_waypoints_dy;
 	Map map;
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
@@ -386,7 +382,6 @@ int main() {
 					auto sensor_fusion = j[1]["sensor_fusion"];
 
 					int prev_size = previous_path_x.size();
-
           if (prev_size > 0)
           {
             car_s = end_path_s;
@@ -407,8 +402,8 @@ int main() {
               double check_car_s = sensor_fusion[i][5];
 
               // predict where the sensed car will be in the future 
-              check_car_s += (double)prev_size*0.02 * check_speed;
-              // if the sensed car is in front of ego and is less than 30 m away
+              check_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
+              // if the sensed car is in front of ego and is less than SAFETY_GAP [m] away
               if (check_car_s > car_s && (check_car_s - car_s) < SAFETY_GAP)
               {
                 // ref_vel = 29.5; // mph
