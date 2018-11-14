@@ -415,6 +415,7 @@ int main() {
           const float SAFETY_GAP = 20;  // distance in front of ego car to check for other cars
           const float BACK_TOL = 5;
           const float FRONT_TOL = 20;
+          const float SPEED_LIMIT = 50;
           bool car_ahead = false;
           bool car_left  = false;
           bool car_right = false;
@@ -432,19 +433,23 @@ int main() {
             double vy = sensor_fusion[i][4];
             double check_speed = sqrt(pow(vx,2) + pow(vy,2));
             double other_car_s = sensor_fusion[i][5];
-            // predict where the sensed car will be in the future 
+            
+            // PREDICTION
+            // predict where the sensed car will be in the future using linear motion model in Frenet frame
             other_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
 
-            // if the sensed car is in front of ego and is less than SAFETY_GAP [m] away
+            // it's safe to overtake if the predicted position of other car is at least BACK_TOL [m] behind me
+            // or at least FRONT_TOL [m] ahead of me
             bool safe_overtake = other_car_s < car_s-BACK_TOL || other_car_s > car_s+FRONT_TOL;
-            // bool safe_overtake = fabs(other_car_s - car_s) > 5;
-            // cout << "safe_overtake: " << safe_overtake << endl;
+            
+            // if the sensed car is in the same lane, in front of ego-car and is less than SAFETY_GAP [m] away
             if (car_lane == lane && other_car_s > car_s && (other_car_s - car_s) < SAFETY_GAP)
             {
               car_ahead = true;
             }
             else if (car_lane == lane + 1 && !safe_overtake)
             {
+              // car is on the right, if it's in the right lane and it's not safe to overtake
               car_right = true;
             }
             else if (car_lane == lane - 1 && !safe_overtake)
@@ -453,10 +458,12 @@ int main() {
             }
           }
 
+          // "BEHAVIOR PLANNING"
           if (car_ahead)
           {
             if (!car_left && lane > 0)
             {
+              // change to the left, if there is a car ahead, no car on the left and ego-car is in center or right lane
               lane--;
             }
             else if (!car_right && lane < 2)
@@ -465,14 +472,17 @@ int main() {
             }
             else 
             {
+              // reduce speed, if car ahead
               ref_vel -= .224;
             }
           }
-          else if (ref_vel < 49.5)
+          else if (ref_vel < SPEED_LIMIT-0.5)
           {
+            // step on it, if no car ahead and speed is less than limit
             ref_vel += .336;
           }
 
+          // TRAJECTORY GENERATION
           Trajectory t = generate_trajectory(lane, ref_vel, j, map);
           vector<double> next_x_vals = t.waypts_x;
           vector<double> next_y_vals = t.waypts_y;
