@@ -414,7 +414,7 @@ int main() {
           // scan for cars in front of me within SAFETY_GAP
           const float SAFETY_GAP = 20;  // distance in front of ego car to check for other cars
           const float BACK_TOL = 5;
-          const float FRONT_TOL = 10;
+          const float FRONT_TOL = 20;
           bool car_ahead = false;
           bool car_left  = false;
           bool car_right = false;
@@ -436,8 +436,9 @@ int main() {
             other_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
 
             // if the sensed car is in front of ego and is less than SAFETY_GAP [m] away
-            // bool safe_overtake = other_car_s < car_s-BACK_TOL && other_car_s > car_s+FRONT_TOL;
-            bool safe_overtake = fabs(other_car_s - car_s) > 5;
+            bool safe_overtake = other_car_s < car_s-BACK_TOL || other_car_s > car_s+FRONT_TOL;
+            // bool safe_overtake = fabs(other_car_s - car_s) > 5;
+            // cout << "safe_overtake: " << safe_overtake << endl;
             if (car_lane == lane && other_car_s > car_s && (other_car_s - car_s) < SAFETY_GAP)
             {
               car_ahead = true;
@@ -454,14 +455,17 @@ int main() {
 
           if (car_ahead)
           {
-            ref_vel -= .224;
             if (!car_left && lane > 0)
             {
               lane--;
             }
-            if (!car_right && lane < 2)
+            else if (!car_right && lane < 2)
             {
               lane++;
+            }
+            else 
+            {
+              ref_vel -= .224;
             }
           }
           else if (ref_vel < 49.5)
