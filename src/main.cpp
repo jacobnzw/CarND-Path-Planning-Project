@@ -337,6 +337,27 @@ bool detect_collision(Trajectory trajectory, vector<vector<double>> predictions_
   return collision;
 }
 
+Trajectory jerk_minimizing_trajectory(int current_lane, double ref_vel, json &sim_data, Map map)
+{
+  // boundary conditions
+  double T = 3;  // time for maneuver
+  Eigen::VectorXd start; start << 0, ref_vel, 0;
+  Eigen::VectorXd end; end << 0, ref_vel, 0;
+  Eigen::MatrixXd A(3, 3);
+  A << pow(T,3),   pow(T,4),    pow(T,5),
+       3*pow(T,2), 4*pow(T,3),  5*pow(T,4),
+       6*T,        12*pow(T,2), 20*pow(T,3);
+  Eigen::VectorXd b(3);
+  b << end[0] - (start[0] + start[1]*T + 0.5*start[2]*pow(T,2)),
+       end[1] - (start[1] + start[2]*T),
+       end[2] - start[2];
+
+  Eigen::VectorXd coeff_35 = A.householderQr().solve(b);
+  Eigen::VectorXd coeff(6);
+  coeff << start[0], start[1], .5*start[2], coeff_35[0], coeff_35[1], coeff_35[2];
+  
+}
+
 
 int main() {
   uWS::Hub h;
