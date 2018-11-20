@@ -444,6 +444,8 @@ int main() {
           }
 
           // "BEHAVIOR PLANNING"
+          // TODO: else if (!car_left && !car_right && lane == 1) change to best advancing lane
+          // TODO: too_close -> slow down, car_ahead -> change lanes
           if (car_ahead)
           {
             if (!car_left && lane > 0)
@@ -454,7 +456,7 @@ int main() {
             else if (!car_right && lane < 2)
             {
               lane++;
-            }
+            } 
             else 
             {
               // reduce speed, if car ahead
