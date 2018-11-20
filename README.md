@@ -1,73 +1,106 @@
 # Path Planning
 Self-Driving Car Engineer Nanodegree Program
 
+
 ### Goals
 In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
-#### The map of the highway is in data/highway_map.txt
-Each waypoint in the list contains `[x, y, s, dx, dy]` values. `x` and `y` are the waypoint's map coordinate position, the `s` value is the distance along the road to get to that waypoint in meters, the `dx` and `dy` values define the unit normal vector pointing outward of the highway loop.
 
-The highway's waypoints loop around so the Frenet `s` value, distance along the road, goes from 0 to 6945.554.
 
-## Basic Build Instructions
+### How it works?
+The path planner usually consists of 3 main modules: behavior planning, prediction and trajectory generation.
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./path_planning`.
 
-Here is the data provided from the Simulator to the C++ Program
+#### Prediction
+In the prediction phase, I loop over the sensor fusion data for each car, supplied by the simulator.
+I take the `d`-coordinate in Frenet frame to determine, which lane does the sensed car occupy (`430-434:main.cpp`).
 
-#### Main car's localization Data (No Noise)
+```cpp
+// which lane is the sensed car in?
+int car_lane = -1;
+if (d > 0 && d < 4)        car_lane = 0;
+else if (d > 4 && d < 8)   car_lane = 1;
+else if (d > 8 && d < 12)  car_lane = 2;
+```
 
-`["x"]` The car's x position in map coordinates
+For each sensed car, I'm using a simple linear motion model in Frenet coordinates to predict its future `s`-coordinate (`438:main.cpp`).
 
-`["y"]` The car's y position in map coordinates
+```cpp
+// predict where the sensed car will be in the future using linear motion model in Frenet frame
+other_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
+```
 
-`["s"]` The car's s position in Frenet coordinates
+Based on the future position of a sensed car, I assess the situation using simple boolean flags.
+That is to say, I determine whether there is a car ahead, on the left or on the right of the ego-vehicle and when it is safe to change lanes. (`440-457:main.cpp`)
 
-`["d"]` The car's d position in Frenet coordinates
+```cpp
+// it's safe to overtake if the predicted position of other car is at least BACK_TOL [m] behind me
+// or at least FRONT_TOL [m] ahead of me
+bool safe_overtake = other_car_s < car_s-BACK_TOL || other_car_s > car_s+FRONT_TOL;
 
-`["yaw"]` The car's yaw angle in the map
+// if the sensed car is in the same lane, in front of ego-car and is less than SAFETY_GAP [m] away
+if (car_lane == lane && other_car_s > car_s && (other_car_s - car_s) < SAFETY_GAP)
+{
+  car_ahead = true;
+}
+else if (car_lane == lane + 1 && !safe_overtake)
+{
+  // car is on the right, if it's in the right lane and it's not safe to overtake
+  car_right = true;
+}
+else if (car_lane == lane - 1 && !safe_overtake)
+{
+  car_left = true;
+}
+```
 
-`["speed"]` The car's speed in MPH
 
-#### Previous path data given to the Planner
+#### Behavior Planning
 
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time.
+The simple behavior planner takes the situation assessment from the predictor and using the following logic (`461-482:main.cpp`) decides what lane to change to.
 
-`["previous_path_x"]` The previous list of x points previously given to the simulator
+```cpp
+if (car_ahead)
+{
+  if (!car_left && lane > 0)
+  {
+    // change to the left, if there is a car ahead, no car on the left and ego-car is in center or right lane
+    lane--;
+  }
+  else if (!car_right && lane < 2)
+  {
+    lane++;
+  }
+  else
+  {
+    // reduce speed, if car ahead
+    ref_vel -= .224;
+  }
+}
+else if (ref_vel < SPEED_LIMIT-0.5)
+{
+  // step on it, if no car ahead and speed is less than limit
+  ref_vel += .336;
+}
+```
 
-`["previous_path_y"]` The previous list of y points previously given to the simulator
 
-#### Previous path's end s and d values
+#### Trajectory Generation
 
-`["end_path_s"]` The previous list's last point's Frenet s value
+For generating a smooth trajectory based on the supplied lane and velocity, I used the suggested single-header spline library available at: http://kluge.in-chemnitz.de/opensource/spline/.
 
-`["end_path_d"]` The previous list's last point's Frenet d value
 
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
 
-`["sensor_fusion"]` A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in Frenet coordinates, car's d position in Frenet coordinates.
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it receives in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner receives should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. `previous_path_x`, and `previous_path_y` can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single header file is really easy to use.
 
 ---
 ### Build & Run
 This project is designed to work with Udacity's [Term3 Simulator](https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).
 
-1. `mkdir build && cd build && cmake .. && make`
-2. Run the simulator `term3_sim.exe`
-3. Run `./path_planning`
+1. Clone this repo.
+2. Make a build directory: `mkdir build && cd build`
+3. Compile: `cmake .. && make`
+4. Run the simulator: `term3_sim.exe`
+5. Run: `./path_planning`
 
 ### Dependencies
 
@@ -89,3 +122,4 @@ This project is designed to work with Udacity's [Term3 Simulator](https://github
     cd uWebSockets
     git checkout e94b6e1
     ```
+---

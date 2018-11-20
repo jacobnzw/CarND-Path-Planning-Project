@@ -422,17 +422,16 @@ int main() {
           for (int i = 0; i < sensor_fusion.size(); i++)
           {
             float d = sensor_fusion[i][6];
+            double vx = sensor_fusion[i][3];
+            double vy = sensor_fusion[i][4];
+            double check_speed = sqrt(pow(vx,2) + pow(vy,2));
+            double other_car_s = sensor_fusion[i][5];
 
             // which lane is the sensed car in?
             int car_lane = -1;
             if (d > 0 && d < 4)        car_lane = 0;
             else if (d > 4 && d < 8)   car_lane = 1;
             else if (d > 8 && d < 12)  car_lane = 2;
-
-            double vx = sensor_fusion[i][3];
-            double vy = sensor_fusion[i][4];
-            double check_speed = sqrt(pow(vx,2) + pow(vy,2));
-            double other_car_s = sensor_fusion[i][5];
             
             // PREDICTION
             // predict where the sensed car will be in the future using linear motion model in Frenet frame
