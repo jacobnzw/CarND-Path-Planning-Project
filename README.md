@@ -88,8 +88,73 @@ else if (ref_vel < SPEED_LIMIT-0.5)
 #### Trajectory Generation
 
 For generating a smooth trajectory based on the supplied lane and velocity, I used the suggested single-header spline library available at: http://kluge.in-chemnitz.de/opensource/spline/.
+The code itself pretty much follows the procedure presented in the project Q&A.
 
+I define 3 waypoints in the Frenet frame that are 30, 60 and 90 meters ahead of the ego-vehicle (`s`) and in the target lane (`d`).
+The spline model is fitted with points transformed to Cartesian car frame.
 
+```cpp
+// add evenly 30m spaced waypoints ahead of the s-coordinate of the ego-vehicle ...
+vector<double> next_wp0 = getXY(car_s + 30, (2 + 4 * lane), map.waypts_s, map.waypts_x, map.waypts_y);
+vector<double> next_wp1 = getXY(car_s + 60, (2 + 4 * lane), map.waypts_s, map.waypts_x, map.waypts_y);
+vector<double> next_wp2 = getXY(car_s + 90, (2 + 4 * lane), map.waypts_s, map.waypts_x, map.waypts_y);
+ptsx.push_back(next_wp0[0]);
+ptsx.push_back(next_wp1[0]);
+ptsx.push_back(next_wp2[0]);
+ptsy.push_back(next_wp0[1]);
+ptsy.push_back(next_wp1[1]);
+ptsy.push_back(next_wp2[1]);
+// ... tranform these waypoints to car frame ...
+for (int i = 0; i < ptsx.size(); i++)
+{
+  double shift_x = ptsx[i] - ref_x;
+  double shift_y = ptsy[i] - ref_y;
+  ptsx[i] = shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw);
+  ptsy[i] = shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw);
+}
+// ... and fit a spline to them
+tk::spline spline_model;
+spline_model.set_points(ptsx, ptsy);
+```
+
+To generate a trajectory, I reuse the leftover points from the previous iteration
+```cpp
+// for continuity reasons, we take the leftover points from the trajectory computed in the previous iteration
+// (that were returned by the simulator in previous_path_x, previous_path_y) ...
+Trajectory tr;
+for (int i = 0; i < prev_size; i++)
+{
+  tr.waypts_x.push_back(previous_path_x[i]);
+  tr.waypts_y.push_back(previous_path_y[i]);
+}
+```
+and compute the remaining points to make the trajectory 50 points long.
+
+```cpp
+// ... and compute the remaining (new) points of the trajectory, such that velocity ref_vel is achieved
+double target_x = 30.0;
+double target_y = spline_model(target_x);
+double target_dist = sqrt(pow(target_x, 2) + pow(target_y, 2));
+double N = target_dist / (.02 * ref_vel/2.24);  // ref_vel [mph] --> ref_vel/2.24 [mps]
+double x_add_on = 0;
+for (int i = 1; i <= 50 - prev_size; i++)
+{
+  double x_point = x_add_on + target_x / N;
+  double y_point = spline_model(x_point);
+  x_add_on = x_point;
+
+  // transform the point of the trajectory back to the world frame
+  double x_ref = x_point;
+  double y_ref = y_point;
+  x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
+  y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
+  x_point += ref_x;
+  y_point += ref_y;
+
+  tr.waypts_x.push_back(x_point);
+  tr.waypts_y.push_back(y_point);
+}
+```
 
 
 ---
