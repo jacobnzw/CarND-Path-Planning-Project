@@ -263,13 +263,19 @@ Trajectory generate_trajectory(int lane, double ref_vel, json &sim_data, Map &ma
   {
     double shift_x = ptsx[i] - ref_x;
     double shift_y = ptsy[i] - ref_y;
-    ptsx[i] = (shift_x * cos(0 - ref_yaw) - shift_y * sin(0 - ref_yaw));
-    ptsy[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
+    ptsx[i] = shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw);
+    ptsy[i] = shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw);
   }
 
   // fit a spline
   tk::spline s;
   s.set_points(ptsx, ptsy);
+
+  // calculate how to break up spline points so that we travel at our desired reference velocity
+  double target_x = 30.0;
+  double target_y = s(target_x);
+  double target_dist = sqrt(pow(target_x, 2) + pow(target_y, 2));
+  double x_add_on = 0;
 
   vector<double> next_x_vals;
   vector<double> next_y_vals;
@@ -278,13 +284,6 @@ Trajectory generate_trajectory(int lane, double ref_vel, json &sim_data, Map &ma
     next_x_vals.push_back(previous_path_x[i]);
     next_y_vals.push_back(previous_path_y[i]);
   }
-
-  // calculate how to break up spline points so that we travel at our desired reference velocity
-  double target_x = 30.0;
-  double target_y = s(target_x);
-  double target_dist = sqrt(pow(target_x, 2) + pow(target_y, 2));
-  double x_add_on = 0;
-
   // fill up the rest of our path planner after filling it with previous points
   // making sure we always output 50 points in next_x_vals, next_y_vals
   for (int i = 1; i <= 50 - prev_size; i++)
