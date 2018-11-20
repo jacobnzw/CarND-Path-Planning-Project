@@ -201,7 +201,7 @@ vector<string> successor_states(string state)
   return next_states;
 }
 
-Trajectory generate_trajectory(int current_lane, double ref_vel, json &sim_data, Map &map)
+Trajectory generate_trajectory(int lane, double ref_vel, json &sim_data, Map &map)
 {
   // unpack localization data
   double car_x = sim_data[1]["x"];
@@ -216,16 +216,6 @@ Trajectory generate_trajectory(int current_lane, double ref_vel, json &sim_data,
   double ref_x = car_x;
   double ref_y = car_y;
   double ref_yaw = deg2rad(car_yaw);
-
-  int lane = current_lane;
-  // if (next_state == "CLR")
-  // {
-  //   lane++;
-  // }
-  // else if (next_state == "CLL")
-  // {
-  //   lane--;
-  // }
 
   int prev_size = previous_path_x.size();
   if (prev_size > 0) car_s = sim_data[1]["end_path_s"];
