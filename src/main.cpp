@@ -179,28 +179,6 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
-// define simple finite state machine
-// given a state, return successor states
-vector<string> successor_states(string state)
-{
-  vector<string> next_states;
-  if (state == "KL")
-  {
-    next_states.push_back("KL");
-    next_states.push_back("CLL");
-    next_states.push_back("CLR");
-  }
-  else if (state == "CLL")
-  {
-    next_states.push_back("KL");
-  }
-  else if (state == "CLR")
-  {
-    next_states.push_back("KL");
-  }
-  return next_states;
-}
-
 Trajectory generate_trajectory(int lane, double ref_vel, json &sim_data, Map &map)
 {
   // unpack localization data
@@ -266,46 +244,43 @@ Trajectory generate_trajectory(int lane, double ref_vel, json &sim_data, Map &ma
     ptsx[i] = shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw);
     ptsy[i] = shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw);
   }
+  // fit a spline to waypoints in the car frame
+  tk::spline spline_model;
+  spline_model.set_points(ptsx, ptsy);
 
-  // fit a spline
-  tk::spline s;
-  s.set_points(ptsx, ptsy);
-
-  // calculate how to break up spline points so that we travel at our desired reference velocity
-  double target_x = 30.0;
-  double target_y = s(target_x);
-  double target_dist = sqrt(pow(target_x, 2) + pow(target_y, 2));
-  double x_add_on = 0;
-
-  vector<double> next_x_vals;
-  vector<double> next_y_vals;
+  // for continuity reasons, we take the leftover points from the trajectory computed in the previous iteration
+  // (that were returned by the simulator in previous_path_x, previous_path_y) ...
+  Trajectory tr;
   for (int i = 0; i < prev_size; i++)
   {
-    next_x_vals.push_back(previous_path_x[i]);
-    next_y_vals.push_back(previous_path_y[i]);
+    tr.waypts_x.push_back(previous_path_x[i]);
+    tr.waypts_y.push_back(previous_path_y[i]);
   }
-  // fill up the rest of our path planner after filling it with previous points
-  // making sure we always output 50 points in next_x_vals, next_y_vals
+  // ... and compute the remaining (new) points of the trajectory, such that velocity ref_vel is achieved
+  double target_x = 30.0;
+  double target_y = spline_model(target_x);
+  double target_dist = sqrt(pow(target_x, 2) + pow(target_y, 2));
+  double N = target_dist / (.02 * ref_vel/2.24);  // ref_vel [mph] --> ref_vel/2.24 [mps]
+  double x_add_on = 0;
   for (int i = 1; i <= 50 - prev_size; i++)
   {
-    double N = (target_dist / (.02 * ref_vel / 2.24));
     double x_point = x_add_on + target_x / N;
-    double y_point = s(x_point);
+    double y_point = spline_model(x_point);
     x_add_on = x_point;
+    
+    // transform the point of the trajectory back to the world frame
     double x_ref = x_point;
     double y_ref = y_point;
-    // transform back to world frame
     x_point = x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw);
     y_point = x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw);
     x_point += ref_x;
     y_point += ref_y;
 
-    next_x_vals.push_back(x_point);
-    next_y_vals.push_back(y_point);
+    tr.waypts_x.push_back(x_point);
+    tr.waypts_y.push_back(y_point);
   }
 
-  Trajectory result = {next_x_vals, next_y_vals};
-  return result;
+  return tr;
 }
 
 bool detect_collision(Trajectory trajectory, vector<vector<double>> predictions_xy, int steps)
@@ -324,6 +299,28 @@ bool detect_collision(Trajectory trajectory, vector<vector<double>> predictions_
     }
   }
   return collision;
+}
+
+// define simple finite state machine
+// given a state, return successor states
+vector<string> successor_states(string state)
+{
+  vector<string> next_states;
+  if (state == "KL")
+  {
+    next_states.push_back("KL");
+    next_states.push_back("CLL");
+    next_states.push_back("CLR");
+  }
+  else if (state == "CLL")
+  {
+    next_states.push_back("KL");
+  }
+  else if (state == "CLR")
+  {
+    next_states.push_back("KL");
+  }
+  return next_states;
 }
 
 
@@ -424,7 +421,7 @@ int main() {
             
             // PREDICTION
             // predict where the sensed car will be in the future using linear motion model in Frenet frame
-            other_car_s += prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
+            other_car_s += 1.0 * check_speed; // prev_size*0.02 * check_speed;  // s_k+1 = s + dt * v
 
             // it's safe to overtake if the predicted position of other car is at least BACK_TOL [m] behind me
             // or at least FRONT_TOL [m] ahead of me
